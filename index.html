@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RDC Starlink - Data Package Activation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar"><div class="brand">RDC STARLINK</div><div class="subtitle">Data Package Activation</div></header>
+<main class="container">
+<section id="packagePage" class="page active"><div class="card">
+<h1>Choose Your Package</h1><p class="intro">Select the data package you want to activate.</p>
+<div id="packageList" class="package-list"></div>
+</div></section>
+
+<section id="pinPage" class="page"><div class="card">
+<button class="back" type="button" onclick="showPage('packagePage')">← Back</button>
+<h1>Enter Your Details</h1><div id="pinPackage" class="selected-package"></div>
+<label for="phone">Phone Number</label>
+<div class="phone-wrap"><span>+243</span><input id="phone" type="tel" inputmode="numeric" maxlength="9" placeholder="912345678" autocomplete="off"></div>
+<div id="phoneError" class="error"></div>
+<label for="pin">4-Digit PIN</label>
+<input id="pin" type="password" inputmode="numeric" maxlength="4" placeholder="Enter 4-digit PIN" autocomplete="off">
+<div id="pinError" class="error"></div>
+<p class="notice">Do not enter personal details other than the information specifically required on this page.</p>
+<button id="pinContinue" class="primary" type="button">Continue</button>
+<div id="pinStatus" class="status"></div>
+</div></section>
+
+<section id="otpPage" class="page"><div class="card">
+<button class="back" type="button" onclick="showPage('pinPage')">← Back</button>
+<h1>Enter OTP</h1><div id="otpPackage" class="selected-package"></div>
+<label for="otp">4-Digit OTP</label>
+<input id="otp" type="text" inputmode="numeric" maxlength="4" placeholder="Enter 4-digit OTP" autocomplete="one-time-code">
+<div id="otpError" class="error"></div>
+<div id="timer" class="timer">01:00</div>
+<p id="expiredText" class="expired"></p>
+<button id="otpVerify" class="primary" type="button">Verify OTP</button>
+<button id="requestOtp" class="secondary hidden" type="button">Request Another OTP</button>
+<p class="notice">Do not enter personal details other than the information specifically required on this page.</p>
+<div id="otpStatus" class="status"></div>
+</div></section>
+
+<section id="successPage" class="page"><div class="card success-card">
+<div class="check">✓</div><h1>Welcome!</h1><div id="successPackage" class="selected-package"></div>
+<p class="success-message">You have received your package and your phone is now connected to the internet.</p>
+<button class="primary" type="button" onclick="location.reload()">Done</button>
+</div></section>
+</main>
+<script src="script.js"></script>
+</body>
+</html>
