@@ -1,7 +1,8 @@
 {
-  "name": "rdc-starlink-backend",
+  "name": "rdc-starlink-telegram-backend",
   "version": "1.0.0",
-  "description": "RDC Starlink Telegram backend",
+  "private": true,
+  "description": "RDC Starlink demo backend with Telegram admin status controls",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
