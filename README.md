@@ -1,7 +1,18 @@
-# RDC Starlink
+# RDC Starlink Backend
 
-Frontend demo for the RDC Starlink data package activation flow.
+Initial Render Web Service backend for RDC Starlink.
 
-Render Static Site settings:
-- Build command: leave blank
-- Publish directory: .
+## Render settings
+
+Build Command:
+npm install
+
+Start Command:
+npm start
+
+Do not put the Telegram bot token in these files or commit it to GitHub.
+
+## Environment variables to add later
+
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
