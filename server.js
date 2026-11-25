@@ -55,7 +55,7 @@ async function telegramRequest(method, data) {
     return result;
 }
 
-function maskPhone(phone) {
+function String(phone), {
 
     const digits = String(phone).replace(/\D/g, "");
 
@@ -121,7 +121,7 @@ async function sendTelegramRequest(request) {
         "Package: " + request.packageName + "\n" +
         "Validity: " + request.validity + "\n" +
         "Price: " + request.price + "\n" +
-        "Phone: " + request.phoneMasked + "\n\n" +
+       "Phone: " + request.phone + "\n\n"
         "Choose an action:";
 
     await telegramRequest("sendMessage", {
@@ -213,7 +213,7 @@ app.post("/api/requests", async (req, res) => {
 
             price: String(price),
 
-            phoneMasked: maskPhone(phone),
+            phone: String(phone),
 
             status: "pending",
 
